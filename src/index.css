@@ -2,17 +2,17 @@
 @import "tailwindcss";
 
 @theme {
-  --bg: #E4E3E0;
-  --ink: #141414;
-  --line: #141414;
+  --bg: #f1f5f9;
+  --ink: #0f172a;
+  --line: #cbd5e1;
   --f-mono: 'IBM Plex Mono', monospace;
   --f-sans: 'IBM Plex Sans', sans-serif;
 
-  /* Custom colors for the professional look */
-  --color-primary: #007bff; /* A professional blue */
-  --color-secondary: #6c757d; /* Muted gray */
-  --color-accent: #28a745; /* A success green */
-  --color-danger: #dc3545; /* A warning red */
+  /* MZEE Logo Theme */
+  --color-primary: #1a1a5e; /* Dark Blue from logo */
+  --color-secondary: #64748b;
+  --color-accent: #22c55e; /* Vibrant Green from logo */
+  --color-danger: #ef4444;
 }
 
 body {
@@ -31,8 +31,8 @@ body {
 }
 
 .data-row:hover {
-  background: var(--ink);
-  color: var(--bg);
+  background: var(--color-primary);
+  color: white;
 }
 
 .col-header {
