@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { addDispatchRecords, subscribeToDispatchHistory, DispatchRecord, addDealer, subscribeToDealers, Dealer, subscribeToAllDispatches, checkDealerExists, checkSerialNumberExists } from './services/firebaseService';
 import { motion, AnimatePresence } from 'motion/react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
 import { ChevronDown, Scan, History, Trash2, Send, UserPlus, Package, Truck, Phone, MapPin, Database, Printer, X, Search, Camera } from 'lucide-react';
 import { PAKISTAN_REGIONS } from './constants';
 
@@ -90,23 +90,40 @@ export default function App() {
 
     let html5QrcodeScanner: Html5QrcodeScanner | undefined;
 
-    if (isScanning) {
-      html5QrcodeScanner = new Html5QrcodeScanner(
-        "reader",
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-          disableFlip: false,
-        },
-        /* verbose= */ false
-      );
-      html5QrcodeScanner.render((decodedText, decodedResult) => {
-        // Simulate a keyboard event for consistency with existing handleScan logic
-        handleScan({ key: 'Enter', target: { value: decodedText } } as React.KeyboardEvent);
-      }, (errorMessage) => {
-        // console.warn(errorMessage);
-      });
-    }
+    const startScanner = async () => {
+      if (isScanning) {
+        try {
+          const cameras = await Html5Qrcode.getCameras();
+          if (cameras && cameras.length) {
+            html5QrcodeScanner = new Html5QrcodeScanner(
+              "reader",
+              {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                disableFlip: false,
+              },
+              /* verbose= */ false
+            );
+            html5QrcodeScanner.render((decodedText, decodedResult) => {
+              handleScan({ key: 'Enter', target: { value: decodedText } } as React.KeyboardEvent);
+            }, (errorMessage) => {
+              console.error("Camera scan error:", errorMessage);
+              alert(`Camera error: ${errorMessage}. Please ensure camera access is granted.`);
+              setIsScanning(false); // Stop scanning on error
+            });
+          } else {
+            alert("No cameras found on this device. Please ensure your camera is connected and accessible.");
+            setIsScanning(false);
+          }
+        } catch (error) {
+          console.error("Error accessing cameras:", error);
+          alert("Could not access camera. Please check camera permissions in your browser settings.");
+          setIsScanning(false);
+        }
+      }
+    };
+
+    startScanner(); // Call the async function
 
     return () => {
       unsubHistory();
