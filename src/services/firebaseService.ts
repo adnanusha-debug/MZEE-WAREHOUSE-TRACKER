@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, serverTimestamp, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, serverTimestamp, query, orderBy, limit, onSnapshot, getDocs, where } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -51,6 +51,24 @@ export const addDealer = async (dealer: Dealer) => {
   } catch (e) {
     console.error('Error adding dealer: ', e);
   }
+};
+
+export const checkDealerExists = async (name: string): Promise<boolean> => {
+  const q = query(collection(db, 'dealers'), where('name', '==', name));
+  const querySnapshot = await getDocs(q);
+  return !querySnapshot.empty;
+};
+
+export const checkSerialNumberExists = async (serialNumber: string): Promise<boolean> => {
+  const qIndoor = query(collection(db, 'dispatches'), where('indoorSerialNumber', '==', serialNumber));
+  const qOutdoor = query(collection(db, 'dispatches'), where('outdoorSerialNumber', '==', serialNumber));
+  
+  const [indoorSnapshot, outdoorSnapshot] = await Promise.all([
+    getDocs(qIndoor),
+    getDocs(qOutdoor)
+  ]);
+
+  return !indoorSnapshot.empty || !outdoorSnapshot.empty;
 };
 
 export const subscribeToDealers = (callback: (dealers: Dealer[]) => void) => {

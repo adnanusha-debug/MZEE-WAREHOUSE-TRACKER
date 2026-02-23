@@ -3,10 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
-import { addDispatchRecords, subscribeToDispatchHistory, DispatchRecord, addDealer, subscribeToDealers, Dealer, subscribeToAllDispatches } from './services/firebaseService';
+import React, { useState, useEffect, useCallback } from 'react';
+import { addDispatchRecords, subscribeToDispatchHistory, DispatchRecord, addDealer, subscribeToDealers, Dealer, subscribeToAllDispatches, checkDealerExists, checkSerialNumberExists } from './services/firebaseService';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronDown, Scan, History, Trash2, Send, UserPlus, Package, Truck, Phone, MapPin, Database, Printer, X, Search } from 'lucide-react';
+import { Html5QrcodeScanner } from 'html5-qrcode';
+import { ChevronDown, Scan, History, Trash2, Send, UserPlus, Package, Truck, Phone, MapPin, Database, Printer, X, Search, Camera } from 'lucide-react';
 import { PAKISTAN_REGIONS } from './constants';
 
 interface PendingUnit {
@@ -35,12 +36,45 @@ export default function App() {
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [syncStatus, setSyncStatus] = useState<string>('Syncing...');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [isScanning, setIsScanning] = useState<boolean>(false);
 
   // Print Preview State
   const [selectedDispatch, setSelectedDispatch] = useState<DispatchRecord | null>(null);
 
   // Dealer Registration State
   const [newDealer, setNewDealer] = useState<Dealer>({ type: 'Dealer', name: '', province: '', city: '', address: '', phoneNumber: '' });
+
+  const handleScan = useCallback(async (e: React.KeyboardEvent | { key: string, target: { value: string } }) => {
+    if (e.key === 'Enter' && e.target.value.trim()) {
+      const code = e.target.value.trim();
+      setScannerInput(''); // Clear input immediately after processing
+
+      const isOutdoor = /^O/i.test(code) || /OUT/i.test(code);
+      const isIndoor = /^I/i.test(code) || /IN/i.test(code);
+
+      if (isOutdoor) {
+        const exists = await checkSerialNumberExists(code);
+        if (exists) {
+          alert(`Outdoor serial number '${code}' already exists!`);
+          return;
+        }
+        if (!outdoorScans.includes(code)) {
+          setOutdoorScans(prev => [...prev, code]);
+        }
+      } else if (isIndoor) {
+        const exists = await checkSerialNumberExists(code);
+        if (exists) {
+          alert(`Indoor serial number '${code}' already exists!`);
+          return;
+        }
+        if (!indoorScans.includes(code)) {
+          setIndoorScans(prev => [...prev, code]);
+        }
+      } else {
+        alert(`Invalid barcode format for: ${code}. Must start with 'I' (Indoor) or 'O' (Outdoor).`);
+      }
+    }
+  }, [indoorScans, outdoorScans]); // Dependencies for useCallback
 
   useEffect(() => {
     const unsubHistory = subscribeToDispatchHistory((records) => {
@@ -53,12 +87,38 @@ export default function App() {
     const unsubAll = subscribeToAllDispatches((data) => {
       setAllDispatches(data);
     });
+
+    let html5QrcodeScanner: Html5QrcodeScanner | undefined;
+
+    if (isScanning) {
+      html5QrcodeScanner = new Html5QrcodeScanner(
+        "reader",
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          disableFlip: false,
+        },
+        /* verbose= */ false
+      );
+      html5QrcodeScanner.render((decodedText, decodedResult) => {
+        // Simulate a keyboard event for consistency with existing handleScan logic
+        handleScan({ key: 'Enter', target: { value: decodedText } } as React.KeyboardEvent);
+      }, (errorMessage) => {
+        // console.warn(errorMessage);
+      });
+    }
+
     return () => {
       unsubHistory();
       unsubDealers();
       unsubAll();
+      if (html5QrcodeScanner) {
+        html5QrcodeScanner.clear().catch(error => {
+          console.error("Failed to clear html5QrcodeScanner", error);
+        });
+      }
     };
-  }, []);
+  }, [isScanning, handleScan]);
 
   const handleDealerSelect = (dealerName: string) => {
     setPartyName(dealerName);
@@ -73,31 +133,17 @@ export default function App() {
 
   const handleRegisterDealer = async () => {
     if (newDealer.name && newDealer.province && newDealer.city && newDealer.address && newDealer.phoneNumber) {
+      const exists = await checkDealerExists(newDealer.name);
+      if (exists) {
+        alert(`${newDealer.type} with name '${newDealer.name}' already exists!`);
+        return;
+      }
       await addDealer(newDealer);
       const registeredType = newDealer.type;
       setNewDealer({ type: 'Dealer', name: '', province: '', city: '', address: '', phoneNumber: '' });
       alert(`${registeredType} Registered Successfully!`);
     } else {
       alert('Please fill all fields');
-    }
-  };
-
-  const handleScan = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && scannerInput.trim()) {
-      const code = scannerInput.trim();
-      const isOutdoor = /^O/i.test(code) || /OUT/i.test(code);
-      const isIndoor = /^I/i.test(code) || /IN/i.test(code);
-
-      if (isOutdoor) {
-        if (!outdoorScans.includes(code)) {
-          setOutdoorScans(prev => [...prev, code]);
-        }
-      } else {
-        if (!indoorScans.includes(code)) {
-          setIndoorScans(prev => [...prev, code]);
-        }
-      }
-      setScannerInput('');
     }
   };
 
@@ -541,11 +587,18 @@ export default function App() {
 
             <section className="mb-4">
               <h2 className="text-lg font-bold text-[var(--ink)] mb-3">2. Scan Units</h2>
-              <div className="relative mb-4">
+              <div className="flex items-center space-x-2 mb-4">
+                <button 
+                  onClick={() => setIsScanning(prev => !prev)}
+                  className={`flex-1 p-3 rounded-xl font-bold flex items-center justify-center space-x-2 transition-all ${isScanning ? 'bg-red-500 text-white' : 'bg-[var(--color-primary)] text-white'} hover:opacity-90 active:scale-[0.98]`}
+                >
+                  {isScanning ? <X size={20} /> : <Camera size={20} />}
+                  <span>{isScanning ? 'STOP SCANNER' : 'START CAMERA SCAN'}</span>
+                </button>
                 <input
                   type="text"
                   id="smartScanner"
-                  className="w-full p-4 border-2 border-[var(--color-primary)] rounded-2xl pr-12 focus:outline-none focus:ring-4 focus:ring-[var(--color-primary)]/10 bg-white text-[var(--ink)] text-lg font-mono"
+                  className="flex-1 p-4 border-2 border-[var(--color-primary)] rounded-2xl pr-12 focus:outline-none focus:ring-4 focus:ring-[var(--color-primary)]/10 bg-white text-[var(--ink)] text-lg font-mono"
                   placeholder="Scan Barcode..."
                   value={scannerInput}
                   onChange={(e) => setScannerInput(e.target.value)}
@@ -555,6 +608,10 @@ export default function App() {
                 />
                 <Scan className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-primary)]" size={24} />
               </div>
+
+              {isScanning && (
+                <div id="reader" className="w-full mb-4 rounded-xl overflow-hidden border-2 border-[var(--color-primary)]"></div>
+              )}
 
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <div className="space-y-2">
@@ -781,7 +838,10 @@ export default function App() {
             top: 0;
             width: 100%;
             padding: 20px;
+            margin: 0;
+            box-sizing: border-box;
           }
+          header, footer, .no-print { display: none !important; }
         }
       `}</style>
     </motion.div>

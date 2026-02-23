@@ -1,5 +1,5 @@
 {
   "name": "MZEE Warehouse Dispatch Portal",
   "description": "A portal for dispatching units from the warehouse, tracking scans, and applying warranty policies.",
-  "requestFramePermissions": []
+  "requestFramePermissions": ["camera"]
 }
